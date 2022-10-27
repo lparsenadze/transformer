@@ -3,43 +3,47 @@ import tensorflow as tf
 from args import get_preprocessing_args
 from transformers import DistilBertTokenizerFast
 import numpy as np
+import tensorflow_datasets as tfds
 
 
 def load_dataset(tfds_name):
     examples, _  = tfds.load(tfds_name, with_info=True,
                               as_supervised=True)
-    train_examples, val_examples = examples['train'], examples['validation']
+    train_examples, test_examples = examples['train'], examples['validation']
     train = {'source': [], 'target': []}
     test = {'source': [], 'target': []}
     for pt, en in train_examples:
         train['source'].append(en.numpy().decode('utf-8'))
         train['target'].append(pt.numpy().decode('utf-8'))
-        
+
     for pt, en in test_examples:
         test['source'].append(en.numpy().decode('utf-8'))
         test['target'].append(pt.numpy().decode('utf-8'))
-    
+   
     return train, test
-         
+
 
 def create_look_ahead_mask(size):
   mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
   return mask  # (seq_len, seq_len) 
 
 
-def convert_to_features(sentences, max_length, tokenizer, return_padding_masks=True):
-    sequences = []
-    padding_masks = []
-    for sent in sentences:
-        toks = tokenizer(sent, max_length=max_length, padding='max_length')
-        seq = toks['input_id']
-        mask = toks['attention_mask']
-        if seq <= max_length:
-            sequences.append(list(seq))
-            padding_masks.append(list(mask))
-    if return_padding_masks:
-        return np.array(sequences), np.array(padding_masks)
-    return np.array(sequences)
+def create_padding_mask(seq):
+    seq = tf.cast(tf.math.equal(seq, 0), tf.float32)
+
+    # add extra dimensions to add the padding
+    # to the attention logits.
+    return seq[:, tf.newaxis, tf.newaxis, :]  # (batch_size, 1, 1, seq_len)
+
+
+def get_seq_pairs(source_sents, target_sents, source_tokenizer, target_tokenizer, max_tokens=128):
+    zipped_data = filter(lambda x: len(source_tokenizer(x[0])['input_ids'])<=max_tokens or len(target_tokenizer(x[1])['input_ids'])<=max_tokens, zip(source_sents, target_sents))
+    zipped_data = list(zipped_data)
+    source_sents_filtered, target_sents_filtered = list(zip(*zipped_data))
+    source_seqs = source_tokenizer(list(source_sents_filtered), padding='max_length', max_length=max_tokens, return_tensors='pt')['input_ids']
+    target_seqs = target_tokenizer(list(target_sents_filtered), padding='max_length', max_length=max_tokens, return_tensors='pt')['input_ids']
+
+    return source_seqs, target_seqs
 
 def get_angles(pos, k, d):
     """

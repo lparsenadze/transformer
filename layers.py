@@ -123,19 +123,28 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 
-class DecoderLayer(tf.keras.layer.Layer):
-    def __init__(self, d_model, num_heads, ffn_dims, dropout=0.1m epsilon=1e-6);
-        super(DecoderLayer, self).__init__():
+class DecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model, num_heads, ffn_dims, dropout=0.1, epsilon=1e-6):
+        super(DecoderLayer, self).__init__()
         self.mha1 = MultiHeadAttention(d_model, num_heads)
         self.mha2 = MultiHeadAttention(d_model, num_heads)
-        self.normlayer1 = tf.keras.layer.LayerNormalization(epsilon=epsilon)
-        self.normlayer2 = tf.keras.layer.LayerNormalization(epsilon=epsilon)
-        self.normlayer3 = tf.keras.layer.LayerNormalization(epsilon=epsilon)
+        self.normlayer1 = tf.keras.layers.LayerNormalization(epsilon=epsilon)
+        self.normlayer2 = tf.keras.layers.LayerNormalization(epsilon=epsilon)
+        self.normlayer3 = tf.keras.layers.LayerNormalization(epsilon=epsilon)
         self.ffn = FullyConnected(d_model, ffn_dims)
-        self.dropout = tf.keras.layer.Droput(dropout)
+        self.dropout = tf.keras.layers.Dropout(dropout)
     
-    def call(self, x, training, mask, encoder_k, encoder_v):
+    def call(self, x, encoder_out, training, look_ahead_mask, padding_mask):
         
+        scaled_attention1, attn_weights_block1 = self.mha1(x, x , x, look_ahead_mask)
+        out1 = self.normlayer1(x + scaled_attention1)
+        scaled_attention2, attn_weights_block2 = self.mha2(encoder_out, encoder_out, out1, padding_mask)
+        out2 = self.normlayer2(out1 + scaled_attention2)
+        ffn_out = self.ffn(out2)
+        ffn_out = self.dropout(ffn_out, training=training)
+        out3 = self.normlayer3(out2 + ffn_out)
+
+        return out3, attn_weights_block1, attn_weights_block2
         
 
 
